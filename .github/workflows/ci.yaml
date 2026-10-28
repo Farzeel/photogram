@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: photogram
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: photogram_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U photogram -d photogram_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://photogram:ci_only_password@localhost:5432/photogram_test
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations
+        run: npm run db:migrate --workspace apps/api
+
+      - name: Test API
+        run: npm test --workspace apps/api
+
+      - name: Build API
+        run: npm run build --workspace apps/api
+
+      - name: Build frontend
+        run: npm run build --workspace apps/web
